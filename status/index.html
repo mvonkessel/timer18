@@ -420,6 +420,9 @@ function updateUI(data) {
   if (data.isHome === true) {
     locIcon.textContent = '🏠';
     locText.textContent = 'Zuhause · Märwil';
+  } else if (data.isAtWork === true) {
+    locIcon.textContent = '🏥';
+    locText.textContent = 'Auf Arbeit · Frauenfeld';
   } else if (data.isHome === false) {
     locIcon.textContent = '🌍';
     locText.textContent = 'Unterwegs';
