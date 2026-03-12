@@ -910,7 +910,7 @@ function getSessionMulti(n){return SESSION_MULTI[Math.min(n,SESSION_MULTI.length
 function getStreakMulti(streak){if(streak<=1)return 1;if(streak<=3)return 1.1;if(streak<=7)return 1.2;if(streak<=14)return 1.35;if(streak<=30)return 1.5;if(streak<=60)return 1.75;if(streak<=100)return 2.0;return 2.0+Math.floor((streak-100)/50)*0.25}
 
 const LOOT={standard:{chance:.65,mMin:1,mMax:1,label:'Standard',cls:'standard'},bonus:{chance:.25,mMin:1.5,mMax:2.5,label:'Bonus!',cls:'bonus'},jackpot:{chance:.10,mMin:3,mMax:5,label:'🎰 Jackpot!',cls:'jackpot'}};
-const DEFAULT_SLICES=[{label:'Aufgaben',weight:6,color:'#808080'},{label:'Excel & Tabellen',weight:6,color:'#c87533'},{label:'Haushalt',weight:4,color:'#1a3fc7'},{label:'Bewegung & Physio',weight:4,color:'#c41e2a'},{label:'Geschenk-Fotos',weight:1,color:'#22c55e'}];
+const DEFAULT_SLICES=[{label:'Aufgaben',weight:6,color:'#808080'},{label:'Excel',weight:6,color:'#c87533'},{label:'Haushalt (+Anki)',weight:4,color:'#1a3fc7'},{label:'Walking/Physio (+Anki)',weight:4,color:'#c41e2a'},{label:'Photography',weight:1,color:'#22c55e'}];
 
 const MILESTONES=[
   {min:100,icon:'🌱',label:'100 Minuten'},{min:500,icon:'🌿',label:'500 Minuten'},
@@ -960,7 +960,7 @@ let preRolledTask=null; // pre-rolled task shown during break
 const MAERWIL_LAT=47.515,MAERWIL_LNG=9.085,MAERWIL_RADIUS_M=3000;
 let _isAtHome=null; // null=unknown, true=in Märwil, false=away
 let _locationWatchId=null;
-const HAUSHALT_LABEL='Haushalt';
+const HAUSHALT_LABEL='Haushalt (+Anki)'; // matching uses includes('Haushalt')
 const MUELL_LABEL='Müll-Management';
 const HAUSHALT_DAILY_CAP_MIN=60;
 const MUELL_DURATION_MIN=60;
@@ -973,7 +973,7 @@ function getHaushaltRemaining(){const d=loadHaushaltToday();return Math.max(0,HA
 function isSaturday(){return new Date().getDay()===6}
 function isMuellNeeded(){return isSaturday()&&!loadHaushaltToday().muellDone}
 function isHaushaltAllowed(){return _isAtHome===true&&getHaushaltRemaining()>0}
-function isHaushaltSlice(s){return s.label===HAUSHALT_LABEL}
+function isHaushaltSlice(s){return s.label&&s.label.includes('Haushalt')}
 
 function distanceM(lat1,lng1,lat2,lng2){
   const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
@@ -1281,14 +1281,10 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'
 
 // ── Persistence ──
 function loadSlices(){try{const s=lsGet('pomo_slices');if(s){let p=JSON.parse(s);if(Array.isArray(p)&&p.length>0&&p.every(s=>s.label&&s.weight>=0&&s.color)){
-  // Migrate: rename "Haushalt & Pflege" to "Haushalt"
-  let migrated=false;p.forEach(sl=>{if(sl.label==='Haushalt & Pflege'){sl.label='Haushalt';migrated=true}});
-  if(migrated){
-    lsSet('pomo_slices',JSON.stringify(p));
-    // Migrate task counts: merge old label into new
-    try{const tc=JSON.parse(lsGet('pomo_task_counts')||'{}');
-    if(tc['Haushalt & Pflege']){tc['Haushalt']=(tc['Haushalt']||0)+tc['Haushalt & Pflege'];delete tc['Haushalt & Pflege'];lsSet('pomo_task_counts',JSON.stringify(tc))}}catch(e){}
-  }
+  // Migrate old Haushalt labels
+  let migrated=false;p.forEach(sl=>{if(sl.label==='Haushalt & Pflege'||sl.label==='Haushalt'){const oldL=sl.label;sl.label='Haushalt (+Anki)';migrated=true;
+    try{const tc=JSON.parse(lsGet('pomo_task_counts')||'{}');if(tc[oldL]){tc['Haushalt (+Anki)']=(tc['Haushalt (+Anki)']||0)+tc[oldL];delete tc[oldL];lsSet('pomo_task_counts',JSON.stringify(tc))}}catch(e){}}});
+  if(migrated)lsSet('pomo_slices',JSON.stringify(p));
   return p;
 }}}catch(e){}return JSON.parse(JSON.stringify(DEFAULT_SLICES))}
 function saveSlicesToStorage(){lsSet('pomo_slices',JSON.stringify(SLICES))}
@@ -2176,10 +2172,10 @@ function saveRoutineSettings(){
   // Re-check routine state if on pick screen
   if(document.getElementById('statePick').classList.contains('active')){resetPick();applyRoutineState()}
 }
-function renderTaskEditor(){const ed=document.getElementById('taskEditor');ed.innerHTML='';SLICES.forEach((s,i)=>{const row=document.createElement('div');row.className='task-row';row.innerHTML=`<input type="color" class="task-color-input" value="${s.color}" data-idx="${i}"><input type="text" class="task-name-input" value="${escHtml(s.label)}" data-idx="${i}" maxlength="24" spellcheck="false"><input type="number" class="task-weight-input" value="${s.weight}" data-idx="${i}" min="0" max="99" step="1"><button class="task-remove-btn" onclick="removeTaskRow(${i})" ${SLICES.length<=1?'disabled style="opacity:0.12"':''}>✕</button>`;ed.appendChild(row)})}
+function renderTaskEditor(){const ed=document.getElementById('taskEditor');ed.innerHTML='';SLICES.forEach((s,i)=>{const isH=isHaushaltSlice(s);const row=document.createElement('div');row.className='task-row';row.innerHTML=`<input type="color" class="task-color-input" value="${s.color}" data-idx="${i}" ${isH?'disabled style="pointer-events:none"':''}><input type="text" class="task-name-input" value="${escHtml(s.label)}" data-idx="${i}" maxlength="24" spellcheck="false" ${isH?'readonly style="opacity:.65;cursor:not-allowed" title="Haushalt ist geschützt (Standort + Cap)"':''}><input type="number" class="task-weight-input" value="${s.weight}" data-idx="${i}" min="0" max="99" step="1"><button class="task-remove-btn" onclick="removeTaskRow(${i})" ${SLICES.length<=1||isH?'disabled style="opacity:0.12"':''}>✕</button>`;ed.appendChild(row)})}
 function addTaskRow(){if(SLICES.length>=8)return;SLICES.push({label:'Neu',weight:1,color:'#888888'});renderTaskEditor()}
-function removeTaskRow(i){if(SLICES.length<=1)return;SLICES.splice(i,1);renderTaskEditor()}
-function saveSettings(){const rows=document.getElementById('taskEditor').querySelectorAll('.task-row');const ns=[];rows.forEach(r=>{const c=r.querySelector('.task-color-input').value,l=r.querySelector('.task-name-input').value.trim(),w=Math.max(0,parseInt(r.querySelector('.task-weight-input').value)||0);if(l)ns.push({label:l,weight:w,color:c})});if(ns.length===0||ns.every(s=>s.weight===0))return;SLICES=ns;TOTAL=SLICES.reduce((s,sl)=>s+sl.weight,0);saveSlicesToStorage();cleanupTaskCounts();document.getElementById('settingsOverlay').classList.remove('open');document.getElementById('settingsBtn').classList.remove('active');updateManualPickVisibility()}
+function removeTaskRow(i){if(SLICES.length<=1||isHaushaltSlice(SLICES[i]))return;SLICES.splice(i,1);renderTaskEditor()}
+function saveSettings(){const rows=document.getElementById('taskEditor').querySelectorAll('.task-row');const ns=[];rows.forEach((r,i)=>{const c=r.querySelector('.task-color-input').value,l=r.querySelector('.task-name-input').value.trim(),w=Math.max(0,parseInt(r.querySelector('.task-weight-input').value)||0);if(l){const orig=SLICES[i];if(orig&&isHaushaltSlice(orig)){ns.push({label:orig.label,weight:w,color:orig.color})}else{ns.push({label:l,weight:w,color:c})}}});if(ns.length===0||ns.every(s=>s.weight===0))return;SLICES=ns;TOTAL=SLICES.reduce((s,sl)=>s+sl.weight,0);saveSlicesToStorage();cleanupTaskCounts();document.getElementById('settingsOverlay').classList.remove('open');document.getElementById('settingsBtn').classList.remove('active');updateManualPickVisibility()}
 function resetAllProgress(){lsRemove('pomo_game');lsRemove('pomo_task_counts');lsRemove('pomo_preRoutineDur');lsRemove('pomo_challenge');try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&(k.startsWith('pomo_stats_')||k.startsWith('pomo_rdone_')||k.startsWith('pomo_week_sessions_')||k.startsWith('pomo_week_tasks_')||k.startsWith('pomo_haushalt_')))localStorage.removeItem(k)}}catch(e){}_preRoutineDuration=null;invalidateStreakCache();invalidateStatsCache();updateAllUI();toggleSettings()}
 
 // ── Export/Import ──
@@ -2200,7 +2196,7 @@ function importData(e){
       if(!data.game||typeof data.game.totalXp!=='number'){alert('Ungültige Datei');return}
       if(!confirm(`Import: ${data.game.totalXp.toLocaleString()} XP, Rang ${getRank(data.game.totalXp)+1}. Aktuelle Daten werden überschrieben. Fortfahren?`))return;
       saveGame(data.game);
-      if(data.slices&&Array.isArray(data.slices)&&data.slices.length>0){SLICES=data.slices;TOTAL=SLICES.reduce((s,sl)=>s+sl.weight,0);saveSlicesToStorage()}
+      if(data.slices&&Array.isArray(data.slices)&&data.slices.length>0){data.slices.forEach(sl=>{if(sl.label==='Haushalt'||sl.label==='Haushalt & Pflege')sl.label='Haushalt (+Anki)'});SLICES=data.slices;TOTAL=SLICES.reduce((s,sl)=>s+sl.weight,0);saveSlicesToStorage()}
       if(typeof data.duration==='number'&&data.duration>0&&data.duration<=180){duration=data.duration;saveDuration()}
       if(Array.isArray(data.history))lsSet('pomo_history',JSON.stringify(data.history));
       if(typeof data.muted==='boolean'){isMuted=data.muted;lsSet('pomo_muted',String(isMuted));updateMuteUI()}
